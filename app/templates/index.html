@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dental Biometric Recognition</title>
+  <meta name="description" content="AI-powered dental X-ray identity recognition system using YOLO segmentation and ResNet18 feature extraction." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay" class="hidden">
+    <div class="spinner-wrap">
+      <div class="spinner"></div>
+      <p id="loading-text">Processing…</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">🦷</span>
+        <span class="logo-text">DentalID</span>
+        <span class="logo-badge">AI</span>
+      </div>
+      <p class="header-sub">Dental Biometric Recognition System · Powered by YOLO + ResNet18</p>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- ── TAB NAV ──────────────────────────────────────── -->
+    <nav class="tab-nav" role="tablist">
+      <button class="tab-btn active" data-tab="recognize" id="tab-recognize">
+        <span class="tab-icon">🔍</span> Nhận Diện
+      </button>
+      <button class="tab-btn" data-tab="add" id="tab-add">
+        <span class="tab-icon">➕</span> Thêm Người
+      </button>
+      <button class="tab-btn" data-tab="delete" id="tab-delete">
+        <span class="tab-icon">🗑️</span> Xóa Người
+      </button>
+    </nav>
+
+    <!-- ── RECOGNIZE PANEL ──────────────────────────────── -->
+    <section class="panel active" id="panel-recognize">
+      <div class="card">
+        <h2 class="card-title">
+          <span>🔍</span> Nhận Diện Bệnh Nhân
+        </h2>
+        <p class="card-desc">Upload ảnh X-ray hàm răng để nhận diện danh tính.</p>
+
+        <div class="upload-zone" id="rec-drop-zone">
+          <input type="file" id="rec-file" accept="image/*" class="file-input" />
+          <label for="rec-file" class="upload-label">
+            <div class="upload-icon">📂</div>
+            <span class="upload-text">Kéo thả hoặc <strong>chọn ảnh X-ray</strong></span>
+            <span class="upload-hint">PNG, JPG, BMP, TIFF…</span>
+          </label>
+          <div id="rec-preview-wrap" class="preview-wrap hidden">
+            <img id="rec-preview" class="preview-img" alt="X-ray preview" />
+            <button class="btn-clear-img" id="rec-clear-btn" title="Clear">✕</button>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-full" id="rec-btn">
+          <span class="btn-icon">🚀</span> Nhận Diện
+        </button>
+      </div>
+
+      <!-- Results -->
+      <div id="rec-results" class="hidden">
+        <!-- Summary card -->
+        <div class="card result-summary" id="rec-summary-card">
+          <div class="result-header">
+            <span class="result-badge" id="rec-badge">✓</span>
+            <div>
+              <h3 id="rec-person-name" class="result-name">—</h3>
+              <p id="rec-tooth-count" class="result-meta">— teeth detected</p>
+            </div>
+            <div class="result-score-wrap">
+              <div class="score-circle" id="rec-score-circle">—</div>
+              <p class="score-label">Score</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top-3 table -->
+        <div class="card">
+          <h4 class="section-label">Top 3 Kết Quả</h4>
+          <table class="results-table" id="rec-top3-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Tên</th>
+                <th>Score</th>
+                <th>Chỉ số</th>
+              </tr>
+            </thead>
+            <tbody id="rec-top3-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Tooth crops -->
+        <div class="card">
+          <h4 class="section-label">Răng Đã Tách (<span id="crop-count">0</span>)</h4>
+          <div class="tooth-grid" id="tooth-grid"></div>
+        </div>
+      </div>
+
+      <!-- Error / info messages -->
+      <div id="rec-message" class="message hidden"></div>
+    </section>
+
+    <!-- ── ADD PERSON PANEL ─────────────────────────────── -->
+    <section class="panel" id="panel-add">
+      <div class="card">
+        <h2 class="card-title">
+          <span>➕</span> Thêm Người Mới
+        </h2>
+        <p class="card-desc">Nhập tên và upload một hoặc nhiều ảnh X-ray để đăng ký vào hệ thống.</p>
+
+        <div class="form-group">
+          <label class="form-label" for="add-name">Tên người</label>
+          <input class="form-input" type="text" id="add-name" placeholder="VD: Nguyen Van A" maxlength="80" />
+        </div>
+
+        <div class="upload-zone multi" id="add-drop-zone">
+          <input type="file" id="add-files" accept="image/*" multiple class="file-input" />
+          <label for="add-files" class="upload-label">
+            <div class="upload-icon">📂</div>
+            <span class="upload-text">Kéo thả hoặc <strong>chọn nhiều ảnh X-ray</strong></span>
+            <span class="upload-hint">Có thể chọn nhiều file cùng lúc</span>
+          </label>
+          <div id="add-preview-wrap" class="preview-wrap multi-previews hidden"></div>
+        </div>
+
+        <button class="btn btn-success btn-full" id="add-btn">
+          <span class="btn-icon">💾</span> Thêm Vào Database
+        </button>
+      </div>
+
+      <div id="add-message" class="message hidden"></div>
+    </section>
+
+    <!-- ── DELETE PERSON PANEL ─────────────────────────── -->
+    <section class="panel" id="panel-delete">
+      <div class="card">
+        <h2 class="card-title">
+          <span>🗑️</span> Xóa Người Khỏi Database
+        </h2>
+        <p class="card-desc">Chọn người muốn xóa. Tất cả dữ liệu liên quan sẽ bị xóa vĩnh viễn.</p>
+
+        <div class="form-group">
+          <label class="form-label" for="delete-select">Chọn người</label>
+          <select class="form-input form-select" id="delete-select">
+            <option value="">— Chọn người —</option>
+          </select>
+        </div>
+
+        <div id="person-count-wrap" class="person-count-wrap">
+          <span id="person-count-badge" class="person-count-badge">0 người</span> trong database
+        </div>
+
+        <button class="btn btn-danger btn-full" id="delete-btn" disabled>
+          <span class="btn-icon">🗑️</span> Xóa Người Này
+        </button>
+      </div>
+
+      <div id="delete-message" class="message hidden"></div>
+    </section>
+
+  </main>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <footer class="site-footer">
+    <p>Dental Biometric Recognition &mdash; YOLO + ResNet18 &mdash; CPU Demo</p>
+  </footer>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
