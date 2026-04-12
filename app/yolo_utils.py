@@ -61,6 +61,8 @@ def crop_polygon(img: np.ndarray, polygon: np.ndarray, size: int = 128) -> np.nd
 def segment_teeth(image_path: str) -> list[np.ndarray]:
     """
     Run YOLO on `image_path` and return a list of cropped tooth images (128×128 BGR).
+    Detections are filtered to keep only the highest confidence match per class
+    and sorted by class ID.
     """
     img = cv2.imread(image_path)
     if img is None:
@@ -69,16 +71,34 @@ def segment_teeth(image_path: str) -> list[np.ndarray]:
     model = get_yolo_model()
     results = model(image_path, conf=0.3, verbose=False)
 
-    teeth = []
-    for result in results:
-        if result.masks is None:
-            continue
-        polygons = result.masks.xy          # list of (N, 2) arrays
-        for polygon in polygons:
-            if len(polygon) < 3:
-                continue
-            crop = crop_polygon(img, polygon, size=128)
-            if crop is not None:
-                teeth.append(crop)
+    # Dictionary to keep only the best detection per class: {class_id: (confidence, polygon)}
+    best_detections = {}
 
+    for result in results:
+        if result.masks is None or result.boxes is None:
+            continue
+            
+        classes = result.boxes.cls.cpu().numpy()
+        confidences = result.boxes.conf.cpu().numpy()
+        polygons = result.masks.xy
+        
+        for cls_id, conf, poly in zip(classes, confidences, polygons):
+            cls_id = int(cls_id)
+            if len(poly) < 3:
+                continue
+                
+            if cls_id not in best_detections or conf > best_detections[cls_id][0]:
+                best_detections[cls_id] = (conf, poly)
+
+    # Sort by class ID
+    sorted_class_ids = sorted(best_detections.keys())
+    
+    teeth = []
+    for cls_id in sorted_class_ids:
+        _, polygon = best_detections[cls_id]
+        crop = crop_polygon(img, polygon, size=128)
+        if crop is not None:
+            teeth.append(crop)
+            
+    print(f"Number of teeth detected after filtering: {len(teeth)} (Classes: {sorted_class_ids})")
     return teeth
