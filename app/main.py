@@ -82,22 +82,22 @@ async def api_recognize(file: UploadFile = File(...)):
             })
 
         # Phase 2 – extract features
-        query_features = [extract_feature(t) for t in teeth_imgs]
+        query_features = [extract_feature(t, version=2) for t in teeth_imgs]
         num_teeth = len(query_features)
 
         # Matching
-        db = load_db()
+        db = load_db(version=2)
         if not db:
             return JSONResponse({
                 "success": False,
-                "message": "Database is empty. Please add at least one person first.",
+                "message": "Database (V2) is empty. Please add a person or rebuild the database.",
                 "tooth_count": num_teeth,
             })
 
-        ranked = match_identity(query_features, db)
+        ranked = match_identity(query_features, db, top_k=10)
 
         # Apply threshold to handle open-set recognition (unknown person)
-        RECOGNITION_THRESHOLD = 0.93
+        RECOGNITION_THRESHOLD = 0.75  # Updated for V2
         MIN_TEETH_REQUIRED = 3
         
         if not ranked:
@@ -143,9 +143,9 @@ async def api_add_person(
     if not name:
         raise HTTPException(status_code=422, detail="Person name cannot be empty.")
 
-    db = load_db()
+    db = load_db(version=2)
     if name in db:
-        raise HTTPException(status_code=400, detail=f"'{name}' already exists in the database.")
+        raise HTTPException(status_code=400, detail=f"'{name}' already exists in the database (V2).")
 
     all_features = []
     tooth_total = 0
@@ -168,7 +168,7 @@ async def api_add_person(
             teeth = segment_teeth(tmp_path)
             tooth_total += len(teeth)
             for t in teeth:
-                all_features.append(extract_feature(t))
+                all_features.append(extract_feature(t, version=2))
 
         if not all_features:
             raise HTTPException(
@@ -176,7 +176,7 @@ async def api_add_person(
                 detail="No teeth detected in any of the uploaded images."
             )
 
-        add_person(name, all_features, db)
+        add_person(name, all_features, db, version=2)
 
     finally:
         for p in tmp_paths:

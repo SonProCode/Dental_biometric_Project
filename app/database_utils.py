@@ -6,20 +6,27 @@ import pickle
 import shutil
 from pathlib import Path
 
-FEATURE_DB_PATH = Path(__file__).parent.parent / "model" / "feature_db.pkl"
+FEATURE_DB_V1_PATH = Path(__file__).parent.parent / "model" / "feature_db.pkl"
+FEATURE_DB_V2_PATH = Path(__file__).parent.parent / "model" / "feature_db_v2.pkl"
 DATABASE_IMAGES_DIR = Path(__file__).parent.parent / "data" / "database_images"
 
 
-def load_db() -> dict:
-    if not FEATURE_DB_PATH.exists():
+def get_db_path(version: int = 2) -> Path:
+    return FEATURE_DB_V2_PATH if version == 2 else FEATURE_DB_V1_PATH
+
+
+def load_db(version: int = 2) -> dict:
+    path = get_db_path(version)
+    if not path.exists():
         return {}
-    with open(FEATURE_DB_PATH, "rb") as f:
+    with open(path, "rb") as f:
         return pickle.load(f)
 
 
-def save_db(db: dict) -> None:
-    FEATURE_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(FEATURE_DB_PATH, "wb") as f:
+def save_db(db: dict, version: int = 2) -> None:
+    path = get_db_path(version)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
         pickle.dump(db, f)
 
 
@@ -27,7 +34,7 @@ def list_persons(db: dict) -> list[str]:
     return sorted(db.keys())
 
 
-def add_person(name: str, features_list: list, db: dict) -> dict:
+def add_person(name: str, features_list: list, db: dict, version: int = 2) -> dict:
     """
     Add `features_list` (list of np.ndarray) for `name` to `db`.
     Raises ValueError if name already exists.
@@ -36,22 +43,22 @@ def add_person(name: str, features_list: list, db: dict) -> dict:
     if name in db:
         raise ValueError(f"Person '{name}' already exists in the database.")
     db[name] = features_list
-    save_db(db)
+    save_db(db, version)
     return db
 
 
-def append_features(name: str, features_list: list, db: dict) -> dict:
+def append_features(name: str, features_list: list, db: dict, version: int = 2) -> dict:
     """
     Append additional features to an existing person entry (used for multi-image add).
     """
     if name not in db:
         db[name] = []
     db[name].extend(features_list)
-    save_db(db)
+    save_db(db, version)
     return db
 
 
-def delete_person(name: str, db: dict) -> dict:
+def delete_person(name: str, db: dict, version: int = 2) -> dict:
     """
     Remove person from db and delete their image folder.
     Raises KeyError if name not found.
@@ -60,8 +67,10 @@ def delete_person(name: str, db: dict) -> dict:
     if name not in db:
         raise KeyError(f"Person '{name}' not found in the database.")
     del db[name]
-    save_db(db)
+    save_db(db, version)
 
+    # Note: deleting the image folder might affect other DB versions if they exist.
+    # But usually, they should be in sync.
     person_dir = DATABASE_IMAGES_DIR / name
     if person_dir.exists():
         shutil.rmtree(person_dir)
