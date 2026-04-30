@@ -122,42 +122,73 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def match_identity(
-    query_features: list[np.ndarray],
+    query_features: list[tuple[int, np.ndarray]],
     db: dict,
-    top_k: int = 10
+    top_k: int = 10,
+    neighbor_range: int = 1,
+    penalty_factor: float = 0.02
 ) -> list[dict]:
     """
-    Compare query_features against every person in db.
-    db structure: {person_name: [feat_vec, feat_vec, ...]}
+    Compare query_features against every person in db using top-k scoring logic with positional penalty.
+    db structure: {person_name: {tooth_id: [feat_vec, feat_vec, ...]}}
+    query_features structure: [(tooth_id, feat_vec), ...]
     """
     if not db:
         return []
 
     ranked = []
-    for person, stored_feats in db.items():
-        if not stored_feats:
+    for person, db_data in db.items():
+        if not db_data:
             continue
             
-        db_matrix = np.stack(stored_feats)  # (N_db, dim)
+        person_matches = []
+        for tooth_id, query_feat in query_features:
+            candidate_ids = range(
+                max(0, tooth_id - neighbor_range),
+                min(31, tooth_id + neighbor_range) + 1
+            )
+            
+            best_score = -1.0
+            
+            for cid in candidate_ids:
+                if cid not in db_data:
+                    continue
+                    
+                db_feats = db_data[cid]
+                if len(db_feats) == 0:
+                    continue
+                    
+                db_matrix = np.stack(db_feats)
+                # Ensure db_matrix is appropriately shaped
+                if db_matrix.ndim == 1:
+                    db_matrix = db_matrix.reshape(1, -1)
+                    
+                sims = db_matrix @ query_feat
+                local_best = float(sims.max())
+                
+                # Penalty for positional offset
+                penalty = penalty_factor * abs(cid - tooth_id)
+                local_best -= penalty
+                
+                if local_best > best_score:
+                    best_score = local_best
+                    
+            if best_score >= 0:
+                person_matches.append(best_score)
         
-        query_best_scores = []
-        for qf in query_features:
-            # dot product = cosine similarity because both are normalized
-            sims = db_matrix @ qf
-            best_sim = float(sims.max())
-            query_best_scores.append(best_sim)
-        
-        if not query_best_scores:
+        if not person_matches:
             continue
 
         # Top-K Mean scoring
-        top_k_scores = sorted(query_best_scores, reverse=True)[:top_k]
+        tk_actual = min(top_k, len(person_matches))
+        top_k_scores = sorted(person_matches, reverse=True)[:tk_actual]
         avg_score = float(np.mean(top_k_scores))
 
         ranked.append({
             "name": person,
             "score": round(avg_score, 4),
-            "num_matched": len(query_best_scores),
+            "num_matched": len(person_matches),
+            "tk_actual": tk_actual,
         })
 
     # Sort results

@@ -73,8 +73,8 @@ async def api_recognize(file: UploadFile = File(...)):
     tmp_path = save_upload_to_tmp(file)
     try:
         # Phase 1 – segmentation
-        teeth_imgs = segment_teeth(tmp_path)
-        if not teeth_imgs:
+        teeth_data = segment_teeth(tmp_path)
+        if not teeth_data:
             return JSONResponse({
                 "success": False,
                 "message": "No teeth detected in the image. Try a clearer X-ray.",
@@ -82,11 +82,11 @@ async def api_recognize(file: UploadFile = File(...)):
             })
 
         # Phase 2 – extract features
-        query_features = [extract_feature(t, version=2) for t in teeth_imgs]
+        query_features = [(t_id, extract_feature(t, version=2)) for (t_id, t) in teeth_data]
         num_teeth = len(query_features)
 
         # Matching
-        db = load_db(version=2)
+        db = load_db(version=3)
         if not db:
             return JSONResponse({
                 "success": False,
@@ -120,7 +120,7 @@ async def api_recognize(file: UploadFile = File(...)):
         print("==============================================\n")
 
         # Encode tooth crops to base64
-        tooth_b64 = [ndarray_to_base64(t) for t in teeth_imgs]
+        tooth_b64 = [ndarray_to_base64(t) for (_, t) in teeth_data]
 
         return {
             "success": True,
@@ -143,11 +143,11 @@ async def api_add_person(
     if not name:
         raise HTTPException(status_code=422, detail="Person name cannot be empty.")
 
-    db = load_db(version=2)
+    db = load_db(version=3)
     if name in db:
-        raise HTTPException(status_code=400, detail=f"'{name}' already exists in the database (V2).")
+        raise HTTPException(status_code=400, detail=f"'{name}' already exists in the database (V3).")
 
-    all_features = []
+    all_features = {}
     tooth_total = 0
     tmp_paths = []
 
@@ -165,10 +165,13 @@ async def api_add_person(
             save_database_image(name, img_bytes, safe_filename)
 
             # Phase 1 + 2
-            teeth = segment_teeth(tmp_path)
-            tooth_total += len(teeth)
-            for t in teeth:
-                all_features.append(extract_feature(t, version=2))
+            teeth_data = segment_teeth(tmp_path)
+            tooth_total += len(teeth_data)
+            for t_id, t in teeth_data:
+                feat = extract_feature(t, version=2)
+                if t_id not in all_features:
+                    all_features[t_id] = []
+                all_features[t_id].append(feat)
 
         if not all_features:
             raise HTTPException(
@@ -176,7 +179,8 @@ async def api_add_person(
                 detail="No teeth detected in any of the uploaded images."
             )
 
-        add_person(name, all_features, db, version=2)
+        num_feature_vectors = sum(len(v) for v in all_features.values())
+        add_person(name, all_features, db, version=3)
 
     finally:
         for p in tmp_paths:
@@ -185,7 +189,7 @@ async def api_add_person(
 
     return {
         "success": True,
-        "message": f"Added '{name}' with {len(all_features)} feature vectors from {tooth_total} teeth.",
+        "message": f"Added '{name}' with {num_feature_vectors} feature vectors from {tooth_total} teeth.",
     }
 
 

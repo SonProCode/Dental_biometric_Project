@@ -58,9 +58,9 @@ def crop_polygon(img: np.ndarray, polygon: np.ndarray, size: int = 128) -> np.nd
     return canvas
 
 
-def segment_teeth(image_path: str) -> list[np.ndarray]:
+def segment_teeth(image_path: str) -> list[tuple[int, np.ndarray]]:
     """
-    Run YOLO on `image_path` and return a list of cropped tooth images (128×128 BGR).
+    Run YOLO on `image_path` and return a list of (tooth_id, cropped tooth image) tuples (128×128 BGR).
     Detections are filtered to keep only the highest confidence match per class
     and sorted by class ID.
     """
@@ -98,7 +98,7 @@ def segment_teeth(image_path: str) -> list[np.ndarray]:
         _, polygon = best_detections[cls_id]
         crop = crop_polygon(img, polygon, size=128)
         if crop is not None:
-            teeth.append(crop)
+            teeth.append((cls_id, crop))
             
     print(f"Number of teeth detected after filtering: {len(teeth)} (Classes: {sorted_class_ids})")
     return teeth
