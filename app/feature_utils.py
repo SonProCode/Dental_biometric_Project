@@ -126,7 +126,9 @@ def match_identity(
     db: dict,
     top_k: int = 10,
     neighbor_range: int = 1,
-    penalty_factor: float = 0.02
+    penalty_factor: float = 0.02,
+    threshold: float = 0.75,
+    debug: bool = False
 ) -> list[dict]:
     """
     Compare query_features against every person in db using top-k scoring logic with positional penalty.
@@ -137,18 +139,35 @@ def match_identity(
         return []
 
     ranked = []
+    
+    # 1. Pre-validate query features
+    valid_query_features = []
+    for tooth_id, query_feat in query_features:
+        if not np.isfinite(query_feat).all():
+            if debug:
+                print(f"tooth_{tooth_id} -> [SKIP] query feature has NaN/Inf")
+            continue
+            
+        # Optional: Re-normalize query feature
+        norm = np.linalg.norm(query_feat)
+        if norm > 0:
+            query_feat = query_feat / norm
+            
+        valid_query_features.append((tooth_id, query_feat))
+
     for person, db_data in db.items():
         if not db_data:
             continue
             
         person_matches = []
-        for tooth_id, query_feat in query_features:
+        for tooth_id, query_feat in valid_query_features:
             candidate_ids = range(
                 max(0, tooth_id - neighbor_range),
                 min(31, tooth_id + neighbor_range) + 1
             )
             
-            best_score = -1.0
+            best_score = -np.inf
+            match_cid = -1
             
             for cid in candidate_ids:
                 if cid not in db_data:
@@ -159,7 +178,10 @@ def match_identity(
                     continue
                     
                 db_matrix = np.stack(db_feats)
-                # Ensure db_matrix is appropriately shaped
+                # Check for NaN/Inf in DB vectors
+                if not np.isfinite(db_matrix).all():
+                    continue
+                    
                 if db_matrix.ndim == 1:
                     db_matrix = db_matrix.reshape(1, -1)
                     
@@ -172,9 +194,15 @@ def match_identity(
                 
                 if local_best > best_score:
                     best_score = local_best
+                    match_cid = cid
                     
-            if best_score >= 0:
+            if best_score > -np.inf and best_score >= 0:
                 person_matches.append(best_score)
+                if debug:
+                    print(f"tooth_{tooth_id} -> matched tooth_{match_cid} score={best_score:.4f}")
+            else:
+                if debug:
+                    print(f"tooth_{tooth_id} -> no match")
         
         if not person_matches:
             continue
@@ -182,15 +210,31 @@ def match_identity(
         # Top-K Mean scoring
         tk_actual = min(top_k, len(person_matches))
         top_k_scores = sorted(person_matches, reverse=True)[:tk_actual]
-        avg_score = float(np.mean(top_k_scores))
+        mean_score = float(np.mean(top_k_scores))
+        
+        # Matched bonus
+        matched_bonus = 0.005 * len(person_matches)
+        final_score = mean_score + matched_bonus
+        
+        # Clamp score cuối
+        final_score = min(float(final_score), 1.0)
 
         ranked.append({
             "name": person,
-            "score": round(avg_score, 4),
+            "score": final_score,
             "num_matched": len(person_matches),
-            "tk_actual": tk_actual,
+            "top_k_used": tk_actual,
+            "avg_top_k": mean_score,
+            "matched_bonus": matched_bonus
         })
 
     # Sort results
     ranked.sort(key=lambda x: x["score"], reverse=True)
+    
+    # Thêm reject UNKNOWN ngay trong matcher
+    if ranked and ranked[0]["score"] < threshold:
+        best_unknown = ranked[0].copy()
+        best_unknown["name"] = "UNKNOWN"
+        return [best_unknown]
+
     return ranked
