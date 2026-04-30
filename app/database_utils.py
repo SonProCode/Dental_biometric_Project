@@ -1,6 +1,6 @@
 """
 Feature database CRUD utilities.
-db structure: {person_name: [np.ndarray, ...]}
+db structure: {person_name: {tooth_id: [np.ndarray, ...]}}
 """
 import pickle
 import shutil

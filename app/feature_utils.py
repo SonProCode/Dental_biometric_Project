@@ -196,7 +196,7 @@ def match_identity(
                     best_score = local_best
                     match_cid = cid
                     
-            if best_score > -np.inf and best_score >= 0:
+            if best_score > -np.inf:
                 person_matches.append(best_score)
                 if debug:
                     print(f"tooth_{tooth_id} -> matched tooth_{match_cid} score={best_score:.4f}")
@@ -213,11 +213,11 @@ def match_identity(
         mean_score = float(np.mean(top_k_scores))
         
         # Matched bonus
-        matched_bonus = 0.005 * len(person_matches)
+        matched_bonus = 0.002 * min(len(person_matches), 20)
         final_score = mean_score + matched_bonus
         
         # Clamp score cuối
-        final_score = min(float(final_score), 1.0)
+        final_score = max(0.0, min(float(final_score), 1.0))
 
         ranked.append({
             "name": person,
@@ -234,6 +234,7 @@ def match_identity(
     # Thêm reject UNKNOWN ngay trong matcher
     if ranked and ranked[0]["score"] < threshold:
         best_unknown = ranked[0].copy()
+        best_unknown["best_candidate"] = best_unknown["name"]
         best_unknown["name"] = "UNKNOWN"
         return [best_unknown]
 
