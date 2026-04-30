@@ -213,6 +213,17 @@ const addFilesInput   = document.getElementById('add-files');
 const addPreviewWrap  = document.getElementById('add-preview-wrap');
 const addUploadLabel  = document.querySelector('#panel-add .upload-label');
 const addBtn          = document.getElementById('add-btn');
+const addClearBtn     = document.getElementById('add-clear-btn');
+
+addClearBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  addFilesInput.value = '';
+  addPreviewWrap.innerHTML = '';
+  addPreviewWrap.classList.add('hidden');
+  addUploadLabel.classList.remove('hidden');
+  addClearBtn.classList.add('hidden');
+  hideMessage('add-message');
+});
 
 addFilesInput.addEventListener('change', async () => {
   addPreviewWrap.innerHTML = '';
@@ -220,10 +231,12 @@ addFilesInput.addEventListener('change', async () => {
   if (!files.length) {
     addPreviewWrap.classList.add('hidden');
     addUploadLabel.classList.remove('hidden');
+    addClearBtn.classList.add('hidden');
     return;
   }
   addPreviewWrap.classList.remove('hidden');
   addUploadLabel.classList.add('hidden');
+  addClearBtn.classList.remove('hidden');
   for (const f of files) {
     const url = await readFileAsDataURL(f);
     const img = document.createElement('img');
@@ -264,6 +277,7 @@ addBtn.addEventListener('click', async () => {
     addPreviewWrap.innerHTML = '';
     addPreviewWrap.classList.add('hidden');
     addUploadLabel.classList.remove('hidden');
+    addClearBtn.classList.add('hidden');
 
     showMessage('add-message', '✅ ' + data.message, 'success');
     showToast(`✅ Đã thêm "${name}" thành công!`);
